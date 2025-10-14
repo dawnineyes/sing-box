@@ -4,7 +4,7 @@ set -e
 
 # === 基本设置 ===
 INSTALL_DIR="/etc/sing-box"
-SNI="updates.cdn-apple.com"
+SNI="learn.microsoft.com"
 REALITY_DOMAIN="$SNI"
 
 # === 检查 root 权限 ===
@@ -103,12 +103,14 @@ KEYS=$("$INSTALL_DIR/sing-box" generate reality-keypair)
 PRIVATE_KEY=$(echo "$KEYS" | grep 'PrivateKey' | awk '{print $2}')
 PUBLIC_KEY=$(echo "$KEYS" | grep 'PublicKey' | awk '{print $2}')
 UUID=$(uuidgen)
+SHORT_ID=$(echo -n ${UUID} | sha1sum | head -c 16)
 PORT=$(( ( RANDOM % 64510 )  + 1025 ))
 
 # === 使用 jq 生成配置文件 ===
 jq -n \
   --arg uuid "$UUID" \
   --arg private_key "$PRIVATE_KEY" \
+  --arg short_id "$SHORT_ID" \
   --arg sni "$SNI" \
   --arg listen "::" \
   --arg type "vless" \
@@ -137,7 +139,8 @@ jq -n \
             server: $sni,
             server_port: 443
           },
-          private_key: $private_key
+          private_key: $private_key,
+          "short_id": [ $short_id ]
         }
       }
     }
