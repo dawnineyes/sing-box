@@ -1,7 +1,13 @@
 ```bash
 bash <(curl -L https://github.com/dawnineyes/sing-box/raw/refs/heads/main/sing-box.sh)
 ```
-
+```
+# 停止并删除服务
+systemctl stop sing-box
+systemctl disable sing-box
+rm -f /etc/systemd/system/sing-box.service
+systemctl daemon-reload
+```
 
 # 🧊 sing-box 一键安装脚本（VLESS + Reality）
 
