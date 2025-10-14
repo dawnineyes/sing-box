@@ -1,3 +1,8 @@
+```bash
+bash <(curl -L https://github.com/dawnineyes/sing-box/raw/refs/heads/main/sing-box.sh)
+```
+
+
 # 🧊 sing-box 一键安装脚本（VLESS + Reality）
 
 这是一个用于自动部署 [sing-box](https://github.com/SagerNet/sing-box) 服务端的 Shell 脚本，支持：
