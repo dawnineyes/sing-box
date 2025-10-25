@@ -118,6 +118,16 @@ jq -n \
   --argjson port "$PORT" \
   '
 {
+  "dns": {
+    "servers": [
+      {
+        "tag": "google",
+        "type": "tls",
+        "server": "8.8.8.8"
+      }
+    ],
+    "strategy": "ipv4_only"
+  },
   inbounds: [
     {
       type: $type,
@@ -148,7 +158,11 @@ jq -n \
   outbounds: [
     {
       type: "direct",
-      tag: "direct"
+      tag: "direct",
+      "domain_resolver": {
+        "server": "google",
+        "strategy": "ipv4_only"
+      }
     }
   ]
 }
