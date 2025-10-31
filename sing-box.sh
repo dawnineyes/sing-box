@@ -121,12 +121,12 @@ jq -n \
   "dns": {
     "servers": [
       {
-        "tag": "self_dns",
+        "tag": "my_dns",
         "type": "tls",
-        "server": "1.1.1.1"
+        "server": "8.8.8.8"
       }
     ],
-    "strategy": "ipv4_only"
+    "strategy": "prefer_ipv4"
   },
   inbounds: [
     {
@@ -160,8 +160,8 @@ jq -n \
       type: "direct",
       tag: "direct",
       "domain_resolver": {
-        "server": "self_dns",
-        "strategy": "ipv4_only"
+        "server": "my_dns",
+        "strategy": "prefer_ipv4"
       }
     }
   ]
