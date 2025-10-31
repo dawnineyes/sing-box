@@ -121,9 +121,9 @@ jq -n \
   "dns": {
     "servers": [
       {
-        "tag": "google",
+        "tag": "self_dns",
         "type": "tls",
-        "server": "8.8.8.8"
+        "server": "1.1.1.1"
       }
     ],
     "strategy": "ipv4_only"
@@ -160,7 +160,7 @@ jq -n \
       type: "direct",
       tag: "direct",
       "domain_resolver": {
-        "server": "google",
+        "server": "self_dns",
         "strategy": "ipv4_only"
       }
     }
