@@ -1,0 +1,155 @@
+name: Fork Release
+
+# Fork-only workflow. It builds exactly two assets and publishes them to this
+# fork's GitHub Releases:
+#   - sing-box_<version>_linux_amd64.deb
+#   - sing-box-<version>-windows-amd64.zip
+#
+# Upstream workflows are intentionally left untouched so that syncing upstream
+# stays conflict-free. Disable the upstream "Build", "Build Linux Packages" and
+# "Publish Docker Images" workflows in the fork's Actions settings instead.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version name, without leading v (e.g. 1.13.0 or 1.13.0-alpha.1)"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark this release as a pre-release"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.10"
+          cache: true
+
+      - name: Resolve version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          VERSION="${INPUT_VERSION#v}"
+          if [ -z "$VERSION" ]; then
+            echo "::error::version is required"
+            exit 1
+          fi
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z]+)*$'; then
+            echo "::error::invalid version: $VERSION"
+            exit 1
+          fi
+          PKG_VERSION="$(printf '%s' "$VERSION" | tr '-' '~')"
+          {
+            echo "VERSION=$VERSION"
+            echo "PKG_VERSION=$PKG_VERSION"
+          } >> "$GITHUB_ENV"
+          echo "Building sing-box $VERSION (deb version: $PKG_VERSION)"
+
+      - name: Build (linux/amd64)
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          set -euo pipefail
+          TAGS="$(tr -d '\r\n' < release/DEFAULT_BUILD_TAGS)"
+          LDFLAGS="$(tr -d '\r\n' < release/LDFLAGS)"
+          echo "Build tags: $TAGS"
+          mkdir -p dist
+          go build -v -trimpath -tags "$TAGS" \
+            -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${VERSION}' ${LDFLAGS} -s -w -buildid=" \
+            -o dist/sing-box ./cmd/sing-box
+          test "$(./dist/sing-box version -n)" = "$VERSION"
+
+      - name: Build (windows/amd64)
+        env:
+          CGO_ENABLED: "0"
+          GOOS: windows
+          GOARCH: amd64
+        run: |
+          set -euo pipefail
+          TAGS="$(tr -d '\r\n' < release/DEFAULT_BUILD_TAGS_WINDOWS)"
+          LDFLAGS="$(tr -d '\r\n' < release/LDFLAGS)"
+          echo "Build tags: $TAGS"
+          go build -v -trimpath -tags "$TAGS" \
+            -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${VERSION}' ${LDFLAGS} -s -w -buildid=" \
+            -o dist/sing-box.exe ./cmd/sing-box
+
+      - name: Package DEB
+        run: |
+          set -euo pipefail
+          sudo gem install fpm --no-document
+          cp .fpm_systemd .fpm
+          fpm -t deb \
+            -v "$PKG_VERSION" \
+            -p "dist/sing-box_${VERSION}_linux_amd64.deb" \
+            --architecture amd64 \
+            dist/sing-box=/usr/bin/sing-box
+          dpkg-deb --info "dist/sing-box_${VERSION}_linux_amd64.deb" | sed -n '1,15p'
+          dpkg-deb --contents "dist/sing-box_${VERSION}_linux_amd64.deb" | grep -q '/usr/bin/sing-box'
+
+      - name: Package ZIP
+        run: |
+          set -euo pipefail
+          DIR="sing-box-${VERSION}-windows-amd64"
+          mkdir -p "dist/$DIR"
+          cp LICENSE "dist/$DIR/"
+          cp dist/sing-box.exe "dist/$DIR/"
+          (cd dist && zip -rq "${DIR}.zip" "$DIR")
+          rm -rf "dist/$DIR"
+          unzip -l "dist/${DIR}.zip"
+
+      - name: Verify assets
+        run: |
+          set -euo pipefail
+          test -f "dist/sing-box_${VERSION}_linux_amd64.deb"
+          test -f "dist/sing-box-${VERSION}-windows-amd64.zip"
+          ls -lh dist
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          DEB="dist/sing-box_${VERSION}_linux_amd64.deb"
+          ZIP="dist/sing-box-${VERSION}-windows-amd64.zip"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$DEB" "$ZIP" --clobber
+            if [ "$PRERELEASE" = "true" ]; then
+              gh release edit "$TAG" --prerelease
+            fi
+          else
+            EXTRA_ARGS=()
+            if [ "$PRERELEASE" = "true" ]; then
+              EXTRA_ARGS+=(--prerelease)
+            fi
+            gh release create "$TAG" "$DEB" "$ZIP" \
+              --target "$GITHUB_SHA" \
+              --title "$TAG" \
+              --generate-notes \
+              "${EXTRA_ARGS[@]}"
+          fi
