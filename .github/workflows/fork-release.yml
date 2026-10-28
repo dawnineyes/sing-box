@@ -108,7 +108,11 @@ jobs:
             --architecture amd64 \
             dist/sing-box=/usr/bin/sing-box
           dpkg-deb --info "dist/sing-box_${VERSION}_linux_amd64.deb" | sed -n '1,15p'
-          dpkg-deb --contents "dist/sing-box_${VERSION}_linux_amd64.deb" | grep -q '/usr/bin/sing-box'
+          # Write the listing to a file instead of piping into "grep -q": with
+          # `set -o pipefail`, grep -q exits on the first match, dpkg-deb then
+          # dies with SIGPIPE ("tar: stdout: write error") and fails the step.
+          dpkg-deb --contents "dist/sing-box_${VERSION}_linux_amd64.deb" > "$RUNNER_TEMP/deb-contents.txt"
+          grep -F -- '/usr/bin/sing-box' "$RUNNER_TEMP/deb-contents.txt"
 
       - name: Package ZIP
         run: |
